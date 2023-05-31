@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "485713015114",
+    "project_id": "storywise-8330a",
+    "storage_bucket": "storywise-8330a.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:485713015114:android:1f49ecf866c1025bee91b3",
+        "android_client_info": {
+          "package_name": "com.storywise.storywise"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "485713015114-odrljq3ljaivfg6c22vav4mse7d5ohgi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJNXJat8IkUFSOkLSAQL6vN7c8CsNrUtI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "485713015114-odrljq3ljaivfg6c22vav4mse7d5ohgi.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
