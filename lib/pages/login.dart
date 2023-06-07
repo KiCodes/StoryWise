@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic/flutter_neumorphic.dart';
 import 'package:storywise/pages/moodPage.dart';
 import 'package:storywise/pages/register.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _usernameEmailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   FocusNode _focusNode = FocusNode();
@@ -30,6 +35,55 @@ class _LoginPageState extends State<LoginPage> {
       _focusUN = _focusNode.hasFocus;
       _focusP = _focusNode.hasFocus;
     });
+  }
+
+
+  Future<void> _login() async {
+    String email = _usernameEmailController.text;
+    String password = _passwordController.text;
+
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Get the user ID of the signed-in user
+      String userId = userCredential.user!.uid;
+
+      // Retrieve the user document from Firestore
+      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance.collection('_users').doc(userId).get();
+
+      // Check if the user document exists and perform authorization checks
+      if (userSnapshot.exists) {
+          // User is authorized, navigate to the desired page
+          Fluttertoast.showToast(
+            msg: 'Login successful',
+            toastLength: Toast.LENGTH_SHORT,
+            gravity: ToastGravity.CENTER,
+          );
+
+          // User is authorized, navigate to the desired page
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => MoodPage()),
+          );
+      } else {
+        // User document does not exist, show an error message or handle it accordingly
+        Fluttertoast.showToast(
+          msg: 'Invalid credentials',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+        );
+      }
+    } catch (error) {
+      // An error occurred during login
+      Fluttertoast.showToast(
+        msg: 'Failed to login: $error',
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+      );
+    }
   }
 
   @override
@@ -141,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.fromLTRB(12.0, 0, 12,0),
                   child: TextField(
                     style: TextStyle(color: Color(0xFF1a237e), fontWeight: FontWeight.bold, fontSize: 15),
-                    controller: _usernameController,
+                    controller: _usernameEmailController,
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintStyle: TextStyle(color: Color(0xFF1a237e)),
@@ -153,7 +207,7 @@ class _LoginPageState extends State<LoginPage> {
                           width: 13,
                         )
                       ),
-                      hintText: 'Username',
+                      hintText: 'Username or email',
 
                     ),
                   ),
@@ -223,7 +277,9 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   minimumSize: MaterialStateProperty.all(Size(310, 55))
                 ),
-                onPressed: () {},
+                onPressed: () {
+                  _login();
+                },
                 child: Text(
                   'Login',
                   style: TextStyle(

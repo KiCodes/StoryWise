@@ -1,8 +1,13 @@
-import 'dart:ui';
+import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+
 
 class EditProfilePage extends StatefulWidget {
   @override
@@ -11,14 +16,23 @@ class EditProfilePage extends StatefulWidget {
 
 class _EditProfilePageState extends State<EditProfilePage> {
   File? _profileImage;
+  File? _bannerImage;
+  String? imageUrl;
+  String? myUName;
+  String? myImage;
+
+
   bool _isScreenDark = false;
   bool _isPositioned = false;
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   double circlePositionX = 0; // X-coordinate of the circle's position
   double circlePositionY = 0; // Y-coordinate of the circle's position
 
   double scale = 1.0;
   double previousScale = 1.0;
-  Offset position = Offset(0.0, 0.0);
+  Offset position = Offset.zero;
   Offset previousPosition = Offset(0.0, 0.0);
 
   @override
@@ -30,12 +44,50 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final pickedImage = await picker.pickImage(source: ImageSource.gallery);
 
       if (pickedImage != null) {
+        try {
+          FirebaseStorage storage = FirebaseStorage.instance;
+          Reference storageReference = storage.ref().child('profilePic/${DateTime.now().millisecondsSinceEpoch}');
+          File imageFile = File(pickedImage.path);
+          TaskSnapshot snapshot = await storageReference.putFile(imageFile);
+          imageUrl = await snapshot.ref.getDownloadURL();
+          print("noo$imageUrl");
+
+          FirebaseFirestore.instance.collection('_images').doc(DateTime.now().toString()).set({
+            'id': 'uchp5YRny0NWOYwgqNwI',
+            'email': 'harry@gmail.com',
+            'profilePic': myImage,
+            'username': myUName,
+            'Image': imageUrl,
+            'downloads': 0,
+            'createdAt': DateTime.now(),
+          });
+
+          Navigator.canPop(context) ? Navigator.pop(context) : null;
+        } on Exception catch (e) {
+          // Handle the exception
+        }
+      }
+    }
+
+    Future<void> _pickBannerImage() async {
+      final picker = ImagePicker();
+      final pickedImage = await picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedImage != null) {
         setState(() {
-          _profileImage = File(pickedImage.path);
-          _isScreenDark = true;
-          _isPositioned = true;
+          _bannerImage = File(pickedImage.path);
+          // _isScreenDark = true;
+          // _isPositioned = true;
         });
       }
+    }
+
+    void read_user_info() async {
+      FirebaseFirestore.instance.collection('_users').doc(FirebaseAuth.instance.currentUser!.uid).get().then<dynamic>((DocumentSnapshot snapshot) async{
+          myUName = snapshot.get('username');
+          myImage = snapshot.get('profilePic');
+
+      });
     }
 
     return SafeArea(
@@ -43,6 +95,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
         ),
+        backgroundColor: Colors.lightBlueAccent.withOpacity(0.8),
         body: GestureDetector(
           onScaleStart: (details) {
             previousScale = scale;
@@ -50,15 +103,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
           },
           onScaleUpdate: (details) {
             setState(() {
-              scale =
-                  (previousScale * details.scale).clamp(1.0, double.infinity);
+              scale = (previousScale * details.scale).clamp(1.0, double.infinity);
+
+              // Calculate the maximum allowed movement in each direction based on the screen dimensions
+              final maxMoveX = (mediaQuery.width * scale - mediaQuery.width) / 2 + 90;
+              final maxMoveY = (mediaQuery.height * scale - mediaQuery.height) / 2 + 90;
+
+              // Calculate the delta values
+              final dx = details.focalPoint.dx - previousPosition.dx;
+              final dy = details.focalPoint.dy - previousPosition.dy;
+
+              // Calculate the new position by adding the delta values and clamping them within the maximum movement limits
               position = Offset(
-                previousPosition.dx +
-                    details.focalPoint.dx -
-                    mediaQuery.width / 2,
-                previousPosition.dy +
-                    details.focalPoint.dy -
-                    mediaQuery.height / 2,
+                (previousPosition.dx + dx).clamp(-maxMoveX, maxMoveX),
+                (previousPosition.dy + dy).clamp(-maxMoveY, maxMoveY),
               );
             });
           },
@@ -76,12 +134,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                       ),
-                      child: _profileImage == null
-                          ? Image.asset("assets/images/IMG_4610.JPG")
-                          : SizedBox.shrink(), // No default image, set ,
+                      child: _bannerImage == null
+                          ? Image.asset(
+                        "assets/images/IMG_4610.JPG",
+                        fit: BoxFit.cover,
+                      )
+                          : Image.file(_bannerImage!, fit: BoxFit.cover),
                     ),
                     SizedBox(height: 16.0),
-
                     // Profile Image Section
                     Row(
                       children: [
@@ -99,10 +159,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               : null,
                         ),
                         SizedBox(width: 16.0),
-                        ElevatedButton(
-                          onPressed: _pickProfileImage,
-                          child: Text('Change Image'),
-                        ),
                       ],
                     ),
                     SizedBox(height: 16.0),
@@ -115,10 +171,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         buildMoodSection('Indifferent'),
                         buildMoodSection('Dark'),
                       ],
+                    ),
+                    Column(
+                      children: [
+
+                      ],
                     )
                   ],
                 ),
               ),
+              //banner button
+              Positioned(
+                top: mediaQuery.height / 7,
+                right: mediaQuery.width / 14,
+                child: ElevatedButton(
+                  onPressed: _pickBannerImage,
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStatePropertyAll(Colors.grey.withOpacity(0.3))
+                  ),
+                  child: Text('Change Banner'),
+                ),
+              ),
+              Positioned(
+                  top: mediaQuery.height / 3.4,
+                  left: mediaQuery.width / 25,
+                  child: GestureDetector(
+                    onTap:
+                      _pickProfileImage,
+                      child: Icon(Icons.camera_enhance_rounded, size: 50, color: Colors.white.withOpacity(0.5),))),
               _isScreenDark
                   ? GestureDetector(
                       onTap: () {
@@ -185,8 +265,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
               )
                   : SizedBox.shrink(),
-              ElevatedButton(onPressed: (){}, child:
-              Text("Apply"))
+              _isScreenDark
+                  ? ElevatedButton(
+                onPressed: (){
+
+                },
+                      child: Text("Apply"))
+                  : SizedBox.shrink(),
             ],
           ),
         ),
@@ -222,7 +307,7 @@ class CircleClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     final path = Path();
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 4; // Adjust the radius as needed
+    final radius = size.width / 2.5; // Adjust the radius as needed
 
     path.addOval(Rect.fromCircle(center: center, radius: radius));
 
@@ -249,7 +334,7 @@ class CircleClipperSmall extends CustomClipper<Path> {
   Path getClip(Size size) {
     final path = Path();
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 4; // Adjust the radius as needed
+    final radius = size.width / 3; // Adjust the radius as needed
 
     path.addOval(Rect.fromCircle(center: center, radius: radius));
 

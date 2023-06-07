@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic/flutter_neumorphic.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'login.dart';
 import 'moodPage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 class RegisterPage extends StatefulWidget {
@@ -16,6 +18,9 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _fullnameController = TextEditingController();
   bool _isUsernameValid = false;
+  bool _isEmailValid = false;
+  bool _isPasswordValid = false;
+
   FocusNode _usernameFocusNode = FocusNode();
 
   void _validateUsername() {
@@ -25,7 +30,34 @@ class _RegisterPageState extends State<RegisterPage> {
       _isUsernameValid = regex.hasMatch(enteredText);
     });
   }
+  void _validateEmail() {
+    final enteredText = _emailController.text;
+    final regex = RegExp(r'^[\w-]+(\.[\w-]+)*@([\w-]+\.)+[a-zA-Z]{2,7}$');
+    setState(() {
+      _isEmailValid = regex.hasMatch(enteredText);
+    });
+  }
+  void _validatePassword() {
+    final enteredText = _passwordController.text;
+    final regex = RegExp(r'^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9]).{8,}$');
+    setState(() {
+      _isPasswordValid = regex.hasMatch(enteredText);
+    });
+  }
 
+  String _capitalizeAfterSpace(String text) {
+    List<String> words = text.split(' ');
+
+    for (int i = 0; i < words.length; i++) {
+      String word = words[i];
+      if (word.isNotEmpty) {
+        String capitalizedWord = word[0].toUpperCase() + word.substring(1);
+        words[i] = capitalizedWord;
+      }
+    }
+
+    return words.join(' ');
+  }
 
   bool _focusFN = false;
   bool _focusEM = false;
@@ -37,6 +69,9 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   void dispose() {
     _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _fullnameController.dispose();
     _focusNode.dispose();
     _usernameFocusNode.dispose();
     super.dispose();
@@ -46,6 +81,9 @@ class _RegisterPageState extends State<RegisterPage> {
   void initState() {
     _focusNode.addListener(_onFocusChange);
     _usernameController.addListener(_validateUsername);
+    _emailController.addListener(_validateEmail);
+    _passwordController.addListener(_validatePassword);
+    super.initState();
   }
   void _onFocusChange() {
     setState(() {
@@ -59,11 +97,12 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: Colors.black87,
       body: SafeArea(
         child: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -74,7 +113,7 @@ class _RegisterPageState extends State<RegisterPage> {
             children: [
               _buildTopHalf(mediaQuery),
               Expanded(
-                child: _buildBottomHalf(),
+                child: _buildBottomHalf(mediaQuery),
               ),
             ],
           ),
@@ -133,7 +172,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   }
 
-  Widget _buildBottomHalf() {
+  Widget _buildBottomHalf(mediaQuery) {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(30.0),
@@ -150,7 +189,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Neumorphic(
                 style: NeumorphicStyle(
                   depth: 10,
-                  color: _focusFN ? const Color(0xFF3f51b5).withOpacity(0.38) : const Color(0xFF3f51b5),
+                  color: _focusFN ? const Color(0xFF3f51b5).withOpacity(0.4) : const Color(0xFF3f51b5).withOpacity(0.08),
                   shadowLightColor: Colors.black.withOpacity(0.4),
                   shadowDarkColor: Colors.black.withOpacity(0.2),
                   intensity: 22,
@@ -178,6 +217,17 @@ class _RegisterPageState extends State<RegisterPage> {
                           )
                       ),
                     ),
+                    onChanged: (text) {
+                      // Apply capitalization logic here
+                      String capitalizedText = _capitalizeAfterSpace(text);
+                      if (capitalizedText.isEmpty) {
+                        capitalizedText = capitalizedText.toUpperCase();
+                      }
+                      _fullnameController.value = _fullnameController.value.copyWith(
+                        text: capitalizedText,
+                        selection: TextSelection.collapsed(offset: capitalizedText.length),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -193,7 +243,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Neumorphic(
                 style: NeumorphicStyle(
                   depth: 10,
-                  color: _focusEM ? const Color(0xFF3f51b5).withOpacity(0.38) : const Color(0xFF3f51b5),
+                  color: _focusEM ? const Color(0xFF3f51b5).withOpacity(0.4) : const Color(0xFF3f51b5).withOpacity(0.08),
                   shadowLightColor: Colors.black.withOpacity(0.4),
                   shadowDarkColor: Colors.black.withOpacity(0.2),
                   intensity: 22,
@@ -225,6 +275,31 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
               ),
             ),
+            Focus(
+              onFocusChange: (hasFocus) {
+                setState(() {
+                  _focusUS = hasFocus;
+                });
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Neumorphic(
+                    // TextField widget
+                  ),
+                  if (_focusEM && !_isEmailValid)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(10.0, 10, 0, 2),
+                      child: Text(
+                        'Invalid email format',
+                        style: TextStyle(
+                          color: Colors.amber,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             //USERNAME
             Focus(
@@ -236,7 +311,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Neumorphic(
                 style: NeumorphicStyle(
                   depth: 10,
-                  color: _focusUS ? const Color(0xFF3f51b5).withOpacity(0.38) : const Color(0xFF3f51b5),
+                  color: _focusUS ? const Color(0xFF3f51b5).withOpacity(0.4) : const Color(0xFF3f51b5).withOpacity(0.08),
                   shadowLightColor: Colors.black.withOpacity(0.4),
                   shadowDarkColor: Colors.black.withOpacity(0.2),
                   intensity: 22,
@@ -280,8 +355,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     // TextField widget
                   ),
                   if (_focusUS && !_isUsernameValid)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(10.0, 10, 0, 2),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(10.0, 10, 0, 2),
                       child: Text(
                         'Username should only have alphabets, numbers, or underscores',
                         style: TextStyle(
@@ -303,7 +378,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Neumorphic(
                 style: NeumorphicStyle(
                   depth: 10,
-                  color: _focusPS ? const Color(0xFF3f51b5).withOpacity(0.38) : const Color(0xFF3f51b5),
+                  color: _focusPS ? const Color(0xFF3f51b5).withOpacity(0.4) : const Color(0xFF3f51b5).withOpacity(0.08),
                   shadowLightColor: Colors.black.withOpacity(0.4),
                   shadowDarkColor: Colors.black.withOpacity(0.2),
                   intensity: 22,
@@ -338,14 +413,39 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
               ),
             ),
+            Focus(
+              onFocusChange: (hasFocus) {
+                setState(() {
+                  _focusUS = hasFocus;
+                });
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Neumorphic(
+                    // TextField widget
+                  ),
+                  if (_focusPS && !_isPasswordValid)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(10.0, 10, 0, 2),
+                      child: Text(
+                        'Password must contain at least 8 characters, including one uppercase letter, one lowercase letter, and one digit',
+                        style: TextStyle(
+                          color: Colors.amber,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             const SizedBox(
               height: 45,
             ),
+            //submit button
             SizedBox(
-              width: 100,
               child: ElevatedButton(
                 style: ButtonStyle(
-                  backgroundColor: MaterialStateProperty.all(Color(0xFF1a237e),),
+                  backgroundColor: MaterialStateProperty.all(const Color(0xFF1a237e),),
                   shape: MaterialStateProperty.all(
                     RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
@@ -353,7 +453,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   minimumSize: MaterialStateProperty.all(const Size(310, 55)),
                 ),
-                onPressed: () {},
+                onPressed: () async {
+                  await register();
+                },
+
                 child: const Text(
                   'Register',
                   style: TextStyle(
@@ -383,5 +486,80 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
     );
+  }
+
+  Future<void> register() async {
+    // Get the values from the text controllers
+    String username = _usernameController.text;
+    String password = _passwordController.text;
+    String email = _emailController.text;
+    String fullname = _fullnameController.text;
+
+    try {
+      // Create a new user with email and password
+      UserCredential userCredential =
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Get the user ID of the created user
+      String userId = userCredential.user!.uid;
+
+      // Create a new document reference in the "_users" collection using the user ID
+      DocumentReference userRef =
+      FirebaseFirestore.instance.collection('_users').doc(userId);
+
+      // Set the data for the user document
+      userRef.set({
+        'username': username,
+        'email': email,
+        'fullname': fullname,
+      });
+
+      // User registration successful
+      print('User registered successfully!');
+
+      // Show pop-up notification
+      Fluttertoast.showToast(
+        msg: 'User signed up successfully',
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+      );
+
+      // Delay for a few seconds
+      await Future.delayed(Duration(seconds: 2));
+
+      // You can navigate to another page or perform any other action here
+
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+          builder: (context) => LoginPage(),));
+
+      setState(() {
+        _usernameController.text = '';
+        _emailController.text = '';
+        _passwordController.text = '';
+        _fullnameController.text = '';
+      });
+    } catch (error) {
+      if (error is FirebaseAuthException) {
+        // Show toast message for email already existing
+        if (error.code == 'email-already-in-use') {
+          Fluttertoast.showToast(
+            msg: 'Email already exists',
+            toastLength: Toast.LENGTH_SHORT,
+            gravity: ToastGravity.BOTTOM,
+          );
+        }else{
+          // An error occurred during user registration
+          print('Failed to register user: $error');
+        }
+      } else {
+        // An error occurred during user registration
+        print('Failed to register user: $error');
+      }
+    }
   }
 }
