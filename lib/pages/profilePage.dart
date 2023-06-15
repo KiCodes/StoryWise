@@ -8,6 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
+import 'package:storywise/pages/storyPage.dart';
+
 
 class EditProfilePage extends StatefulWidget {
   @override
@@ -24,6 +26,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   bool _isScreenDark = false;
   bool _isPositioned = false;
+  bool _isSelected = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -166,9 +169,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        buildMoodSection('Happy'),
-                        buildMoodSection('Sad'),
-                        buildMoodSection('Indifferent'),
+                        Text('Happy',
+                          style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold
+                          ),),
+                        Text('Sad',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold
+                          ),),
+                        Text('Indifferent',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold
+                          ),),
+                        Text('Dark',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold
+                          ),),
+                      ],
+                    ),
+                    Column(
+                      children: [
                         buildMoodSection('Dark'),
                       ],
                     ),
@@ -280,23 +300,84 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget buildMoodSection(String mood) {
-    // TODO: Implement mood section based on the given mood
-    // Display mood title and list of stories
     return Container(
       margin: EdgeInsets.only(bottom: 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            mood,
-            style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-          ),
           SizedBox(height: 8.0),
-          // TODO: Display list of stories within the mood section
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('_users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .collection('favoriteStories')
+                .snapshots(),
+            builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return CircularProgressIndicator(); // Display a loading indicator while fetching data
+              }
+
+              if (snapshot.hasError) {
+                return Text('Error: ${snapshot.error}');
+              }
+
+              if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
+                return Text('No favorite stories found.');
+              }
+
+              // Extract the list of story IDs from the snapshot
+              List<String> storyIds = snapshot.data!.docs.map((doc) => doc.id).toList();
+
+              if (storyIds.isEmpty) {
+                return Text('No favorite stories found.');
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                itemCount: storyIds.length,
+                itemBuilder: (BuildContext context, int index) {
+                  return FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('_stories').doc(storyIds[index]).get(),
+                    builder: (BuildContext context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator();
+                      }
+
+                      if (snapshot.hasError) {
+                        return Text('Error: ${snapshot.error}');
+                      }
+
+                      if (!snapshot.hasData || !snapshot.data!.exists) {
+                        return SizedBox.shrink();
+                      }
+
+                      // Extract the title and content from the story document
+                      String title = snapshot.data!.get('title');
+                      String content = snapshot.data!.get('content');
+
+                      return ListTile(
+                        title: Text(title),
+                        subtitle: Text(content),
+                        onTap: () {
+                          // Handle the tap on the story here, navigate to another page
+                          // Navigator.push(
+                          //   context,
+                          //   MaterialPageRoute(builder: (context) => StoryPage(title, content)),
+                          // );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
         ],
       ),
     );
   }
+
 }
 
 class CircleClipper extends CustomClipper<Path> {

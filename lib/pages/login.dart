@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_neumorphic/flutter_neumorphic.dart';
+import 'package:provider/provider.dart';
 import 'package:storywise/pages/moodPage.dart';
 import 'package:storywise/pages/register.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+import 'package:storywise/firebase/auth.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -37,58 +36,11 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-
-  Future<void> _login() async {
-    String email = _usernameEmailController.text;
-    String password = _passwordController.text;
-
-    try {
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // Get the user ID of the signed-in user
-      String userId = userCredential.user!.uid;
-
-      // Retrieve the user document from Firestore
-      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance.collection('_users').doc(userId).get();
-
-      // Check if the user document exists and perform authorization checks
-      if (userSnapshot.exists) {
-          // User is authorized, navigate to the desired page
-          Fluttertoast.showToast(
-            msg: 'Login successful',
-            toastLength: Toast.LENGTH_SHORT,
-            gravity: ToastGravity.CENTER,
-          );
-
-          // User is authorized, navigate to the desired page
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => MoodPage()),
-          );
-      } else {
-        // User document does not exist, show an error message or handle it accordingly
-        Fluttertoast.showToast(
-          msg: 'Invalid credentials',
-          toastLength: Toast.LENGTH_SHORT,
-          gravity: ToastGravity.CENTER,
-        );
-      }
-    } catch (error) {
-      // An error occurred during login
-      Fluttertoast.showToast(
-        msg: 'Failed to login: $error',
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.CENTER,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context).size;
+    AuthProvider authProvider = Provider.of<AuthProvider>(context);
+
     return Scaffold(
       backgroundColor: Colors.black87,
       body: SafeArea(
@@ -106,7 +58,7 @@ class _LoginPageState extends State<LoginPage> {
               Expanded(
                 child: Container(
                   height: double.infinity,
-                  child: _buildBottomHalf(),
+                  child: _buildBottomHalf(authProvider),
                 ),
               ),
             ],
@@ -165,7 +117,7 @@ class _LoginPageState extends State<LoginPage> {
 
   }
 
-  Widget _buildBottomHalf() {
+  Widget _buildBottomHalf(AuthProvider authProvider) {
 
     return SingleChildScrollView(
       child: Padding(
@@ -278,7 +230,7 @@ class _LoginPageState extends State<LoginPage> {
                   minimumSize: MaterialStateProperty.all(Size(310, 55))
                 ),
                 onPressed: () {
-                  _login();
+                  authProvider.login(_usernameEmailController, _passwordController, context);
                 },
                 child: Text(
                   'Login',

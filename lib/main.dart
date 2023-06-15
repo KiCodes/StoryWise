@@ -6,14 +6,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 import 'constants/transitionBuilder.dart';
+import 'firebase/auth.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
-  runApp(ChangeNotifierProvider(
-      create: (BuildContext context) => MyAppState(),
-      child: const MyApp()));
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(
+          create: (BuildContext context) => MyAppState(),),
+      ChangeNotifierProvider<AuthProvider>(
+        create: (_) => AuthProvider(),
+      ),
+    ],
+    child: const MyApp(),
+  ),);
 }
 
 class MyApp extends StatelessWidget {
@@ -42,7 +50,7 @@ class MyApp extends StatelessWidget {
 class MyAppState extends ChangeNotifier{
   bool _happyStories = false;
 
-  bool get happyStories => _happyStories;
+  List favorites = [];
 
 
   bool _randomStories = false;
@@ -55,6 +63,7 @@ class MyAppState extends ChangeNotifier{
 
   bool get darkStories => _darkStories;
 
+  bool get happyStories => _happyStories;
 
   void setHappyStories(bool value) {
     _happyStories = value;

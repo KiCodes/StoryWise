@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:storywise/main.dart';
 import 'package:storywise/pages/login.dart';
@@ -5,13 +6,24 @@ import 'package:storywise/pages/profilePage.dart';
 import 'package:storywise/pages/storyPage.dart';
 import 'package:provider/provider.dart';
 
-class MoodPage extends StatelessWidget {
+import '../firebase/auth.dart';
+
+class MoodPage extends StatefulWidget {
   const MoodPage({super.key});
+
+  @override
+  State<MoodPage> createState() => _MoodPageState();
+}
+
+class _MoodPageState extends State<MoodPage> {
+  late User? currentUser;
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<MyAppState>();
     final mediaQuery = MediaQuery.of(context).size;
+    AuthProvider authProvider = Provider.of<AuthProvider>(context);
+    currentUser = authProvider.user;
 
     return SafeArea(
       child: Scaffold(
@@ -86,7 +98,9 @@ class MoodPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                ListTile(
+                //profile
+                if (currentUser != null)
+                  ListTile(
                   title: GestureDetector(
                     onTap: (){
                       Navigator.push(context,
@@ -101,10 +115,13 @@ class MoodPage extends StatelessWidget {
                     // Handle the profile option
                   },
                 ),
+                if (currentUser  != null)
                 Divider(color: Colors.grey.withOpacity(0.5),
                     thickness: 3,
                 indent: 15,
                 endIndent: 15,),
+                //saved stories
+                if (currentUser  != null)
                 ListTile(
                   title: const Text('Saved Stories',style:  TextStyle(
                     color: Colors.white,
@@ -114,10 +131,12 @@ class MoodPage extends StatelessWidget {
                     // Handle the saved stories option
                   },
                 ),
+                if (currentUser  != null)
                 Divider(color: Colors.grey.withOpacity(0.5),
                   thickness: 3,
                   indent: 15,
                   endIndent: 15,),
+                if (currentUser  == null)
                 ListTile(
                   title: InkWell(
                     onTap: () {
@@ -127,6 +146,21 @@ class MoodPage extends StatelessWidget {
                       );
                     },
                     child: const Text('Sign In',style:  TextStyle(
+                      color: Colors.white,
+
+                    ),),
+                  ),
+                  onTap: () {
+                    // Handle the saved stories option
+                  },
+                ),
+                if (currentUser  != null)
+                ListTile(
+                  title: InkWell(
+                    onTap: () {
+                      authProvider.logout();
+                    },
+                    child: const Text('Sign Out',style:  TextStyle(
                       color: Colors.white,
 
                     ),),

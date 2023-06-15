@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:dots_indicator/dots_indicator.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:storywise/firebase/auth.dart';
 
 import 'package:storywise/main.dart';
+import 'package:storywise/pages/login.dart';
 
 class StoryGenerator extends StatefulWidget {
   const StoryGenerator({Key? key}) : super(key: key);
@@ -25,14 +29,74 @@ class _StoryGeneratorState extends State<StoryGenerator> {
   int _currentHeading = 0;
   Timer? _timer;
 
+  late User? currentUser;
+
+  String _currentStoryId = '';
+
   bool _endOfStories = false;
   bool _loading = false;
   bool _hasInternet = false;
+  bool _isFavorited = false;
   String mood = "";
 
   List<String> _pages = [];
-  List<String> _stories = [];
+  List<Story> _stories = [];
   List<String> _headings = [];
+
+  @override
+  void initState() {
+    print("working??");
+    super.initState();
+
+    subscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      setState(() {
+        _hasInternet = result != ConnectivityResult.none;
+      });
+    });
+    _pageController = PageController(initialPage: _currentPage);
+    WidgetsBinding.instance?.addPostFrameCallback((_) {
+      mediaQueryC = MediaQuery.of(context).size; // Initialize mediaQuery
+      final appState = Provider.of<MyAppState>(context, listen: false);
+      AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
+      currentUser = authProvider.user;
+
+      setState(() {
+        print("set state pass??");
+        if (appState.happyStories == true) {
+          _fetchStoriesFromFirestore("happy");
+          _fetchHeadingsFromFirestore("happy");
+          mood = "happy";
+        } else if (appState.sadStories == true) {
+          _fetchStoriesFromFirestore("sad");
+          _fetchHeadingsFromFirestore("sad");
+          mood = "sad";
+        } else if (appState.randomStories == true) {
+          _fetchStoriesFromFirestore("random");
+          _fetchHeadingsFromFirestore("random");
+          mood = "random";
+        } else {
+          _fetchStoriesFromFirestore("dark");
+          _fetchHeadingsFromFirestore("dark");
+          mood = "dark";
+
+
+          // Set isFavorite to false if currentUser is null
+          if (currentUser == null) {
+            print("eweee $currentUser");
+            for (var story in _stories) {
+              story.isFavorite = false;
+            }
+          }
+          else{
+            print("eweee $currentUser");
+            _isFavorited = _currentStory < _stories.length ? _stories[_currentStory].isFavorite : false;
+          }
+        }
+
+
+      });
+    });
+  }
 
   @override
   void dispose() {
@@ -48,9 +112,8 @@ class _StoryGeneratorState extends State<StoryGenerator> {
 
     TextSpan textSpan = TextSpan(
       text: text,
-      style: const TextStyle(fontSize: 23, color: Colors.white),
+      style: const TextStyle(fontSize: 19, color: Colors.white),
     );
-
     TextPainter textPainter = TextPainter(
       text: textSpan,
       textDirection: TextDirection.ltr,
@@ -113,27 +176,17 @@ class _StoryGeneratorState extends State<StoryGenerator> {
       return;
     }
 
-    bool isConnected = await checkInternetConnectivity();
-    // if (!isConnected) {
-    //   // Show "No Internet Connection" message
-    //   showDialog(
-    //     context: context,
-    //     builder: (BuildContext context) {
-    //       return Alert();
-    //     },
-    //   );
-    //   return;
-    // }
     if (_currentStory < _stories.length - 1) {
       setState(() {
-        int _previousStory = _currentStory;
         _currentStory++;
         _currentPage = 0;
         _pages = splitString(
-          _stories[_currentStory],
+          _stories[_currentStory].content,
           mediaQueryC.width,
           mediaQueryC.height / 1.9,
         );
+        _currentStoryId = _stories[_currentStory].id;
+        print("############ $_currentStoryId");
       });
       _pageController.animateToPage(
         0,
@@ -144,6 +197,95 @@ class _StoryGeneratorState extends State<StoryGenerator> {
       setState(() {
         _endOfStories = true;
       });
+    }
+  }
+
+  //adding fav story
+  void toggleFavorite() async {
+    // Check if the user is logged in
+    if (_stories.isNotEmpty) {
+      User? user = FirebaseAuth.instance.currentUser;
+      // print("------------- $user --------");
+      if (user == null) {
+        // Show pop-up notification and navigate to the login page
+        Fluttertoast.showToast(
+          msg: 'Please sign up to favorite',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          backgroundColor: Colors.grey,
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => LoginPage()),
+        );
+        return; // Exit the function if user is null
+      }
+
+      _hasInternet = await InternetConnectionChecker().hasConnection;
+      // Get the user's ID
+      if (_hasInternet) {
+        String userId = user.uid;
+
+        // Get the current story ID (replace 'currentStoryId' with the actual ID of the current story)
+          Story currentStory = _stories[_currentStory];
+          String currentStoryId = _currentStoryId;
+          print("%%%%%%%%%%%%%%%% $currentStoryId");
+
+          // Get the user document reference
+          DocumentReference userRef =
+          FirebaseFirestore.instance.collection('_users').doc(userId);
+
+          // Check if the subcollection 'favoriteStories' exists
+          DocumentSnapshot userSnapshot = await userRef.get();
+          if (!userSnapshot.exists || (userSnapshot.data() as Map<String, dynamic>).containsKey('favoriteStories')) {
+            // Create the 'favoriteStories' subcollection
+            CollectionReference favoriteStoriesRef = userRef.collection('favoriteStories');
+
+            // Create the document inside the 'favoriteStories' subcollection
+            DocumentReference storyRef = favoriteStoriesRef.doc(currentStoryId);
+            await storyRef.set({
+              'storyId': currentStoryId,
+              // Add any additional fields you want to save with the story
+            });
+
+            // Update the UI to reflect that the story is favorited
+            setState(() {
+              _isFavorited = true;
+            });
+          } else {
+            // The 'favoriteStories' subcollection exists, check if the current story is already favorited
+            DocumentSnapshot favoriteSnapshot = await userRef.collection('favoriteStories').doc(currentStoryId).get();
+            if (favoriteSnapshot.exists) {
+              // The current story is already favorited, so remove it from the 'favoriteStories' subcollection
+              await userRef.collection('favoriteStories').doc(currentStoryId).delete();
+
+              // Update the UI to reflect that the story is not favorited
+              setState(() {
+                _stories[_currentStory].isFavorite = false;
+                _isFavorited = false;
+              });
+            } else {
+              // The current story is not favorited, so add it to the 'favoriteStories' subcollection
+              await userRef.collection('favoriteStories').doc(currentStoryId).set({
+                'storyId': currentStoryId,
+              });
+
+              // Update the UI to reflect that the story is favorited
+              setState(() {
+                _stories[_currentStory].isFavorite = true;
+                _isFavorited = true;
+              });
+            }
+          }
+      }
+      else{
+        Fluttertoast.showToast(
+          msg: "No Internet Connection",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          backgroundColor: Colors.grey,
+        );
+      }
     }
   }
 
@@ -159,16 +301,23 @@ class _StoryGeneratorState extends State<StoryGenerator> {
 
     });
 
-    _hasInternet = await InternetConnectionChecker().hasConnection;
+    // Fetch the favorite stories of the current user
+    final currentUserFavorites = await FirebaseFirestore.instance
+        .collection('_users')
+        .doc(FirebaseAuth.instance.currentUser!.uid)
+        .collection('favoriteStories')
+        .get();
 
-    Timer(Duration(seconds: 10), () {
+    final favoriteStoryIds = currentUserFavorites.docs.map((doc) => doc.id).toSet();
+
+    Timer(const Duration(seconds: 10), () {
       if (_loading) {
         setState(() {
           // Handle the timeout scenario here
           showDialog(
             context: context,
             builder: (BuildContext context) {
-              return Alert();
+              return const Alert();
             },
           );
           _loading = false;
@@ -176,38 +325,43 @@ class _StoryGeneratorState extends State<StoryGenerator> {
       }
     });
 
-      FirebaseFirestore.instance
+    final snapshot = await FirebaseFirestore.instance
           .collection('_stories')
           .where('mood', isEqualTo: mood)
-          .get()
-          .then((QuerySnapshot snapshot) {
-        setState(() {
-          _stories = snapshot.docs.map((DocumentSnapshot document) {
-            final data = document.data() as Map<String,
-                dynamic>?; // Explicitly cast data to Map<String, dynamic>
-            final content = data != null ? data['content'] as String : '';
-            return content;
-          }).toList();
+          .get();
 
-          if (_stories.isNotEmpty) {
-            _pages = splitString(
-              _stories[_currentStory],
-              mediaQueryC.width,
-              mediaQueryC.height / 1.9,
-            );
-          } else {
-            // No stories found for the selected mood
-            _endOfStories = true;
-          }
-        });
-      }).catchError((error) {
-        print('Error retrieving stories: $error');
-      }).whenComplete(() {
-        setState(() {
-          // Set the loading state to false once the data fetching is complete
-          _loading = false;
-        });
-      });
+    setState(() {
+      _stories = snapshot.docs.map((DocumentSnapshot document) {
+        final data = document.data() as Map<String, dynamic>?;
+        final content = data != null ? data['content'] as String : '';
+        final storyId = document.id;
+        // Check if the story is favorited by the current user
+        final bool isFavorite = favoriteStoryIds.contains(storyId);
+
+        return Story(
+          id: storyId,
+          content: content,
+          isFavorite: isFavorite,
+        );
+      }).toList();
+
+      if (_stories.isNotEmpty) {
+        _currentStoryId = _stories[_currentStory].id;
+        _pages = splitString(
+          _stories[_currentStory].content,
+          mediaQueryC.width,
+          mediaQueryC.height / 1.9,
+        );
+      } else {
+        _endOfStories = true;
+      }
+
+      _loading = false;
+    });
+    setState(() {
+      // Set the loading state to false once the data fetching is complete
+      _loading = false;
+    });
   }
 
   Future<void> _fetchHeadingsFromFirestore(String mood) async {
@@ -220,14 +374,14 @@ class _StoryGeneratorState extends State<StoryGenerator> {
     _hasInternet = await InternetConnectionChecker().hasConnection;
     print('____$_hasInternet');
 
-    Timer(Duration(seconds: 10), () {
+    Timer(const Duration(seconds: 10), () {
       if (_loading) {
         setState(() {
           // Handle the timeout scenario here
           showDialog(
             context: context,
             builder: (BuildContext context) {
-              return Alert();
+              return const Alert();
             },
           );
           _loading = false;
@@ -278,55 +432,17 @@ class _StoryGeneratorState extends State<StoryGenerator> {
     }
   }
 
-  //check internet connection
-  Future<bool> checkInternetConnectivity() async {
-    var connectivityResult = await Connectivity().checkConnectivity();
-    return connectivityResult != ConnectivityResult.none;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-
-    subscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      setState(() {
-        _hasInternet = result != ConnectivityResult.none;
-      });
-    });
-    _pageController = PageController(initialPage: _currentPage);
-    WidgetsBinding.instance?.addPostFrameCallback((_) {
-      mediaQueryC = MediaQuery.of(context).size; // Initialize mediaQuery
-      final appState = Provider.of<MyAppState>(context, listen: false);
-
-      setState(() {
-        if (appState.happyStories == true) {
-          _fetchStoriesFromFirestore("happy");
-          _fetchHeadingsFromFirestore("happy");
-          mood = "happy";
-        } else if (appState.sadStories == true) {
-          _fetchStoriesFromFirestore("sad");
-          _fetchHeadingsFromFirestore("sad");
-          mood = "sad";
-        } else if (appState.randomStories == true) {
-          _fetchStoriesFromFirestore("random");
-          _fetchHeadingsFromFirestore("random");
-          mood = "random";
-        } else {
-          _fetchStoriesFromFirestore("dark");
-          _fetchHeadingsFromFirestore("dark");
-          mood = "dark";
-        }
-      });
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context).size;
+    _isFavorited = _currentStory < _stories.length ? _stories[_currentStory].isFavorite : false;
+
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Color(0xFF0c134f),
+        backgroundColor: const Color(0xFF0c134f),
         elevation: 0,
         centerTitle: true,
         title: _loading
@@ -334,7 +450,7 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                 color: Colors.yellowAccent,
               ) // Display the loading indicator
             : !_hasInternet
-                ? Text(
+                ? const Text(
                     'No Internet Connection',
                     style: TextStyle(
                       fontSize: 16,
@@ -355,7 +471,7 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                     : const SizedBox(),
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -391,15 +507,16 @@ class _StoryGeneratorState extends State<StoryGenerator> {
             //page content
             Center(
               child: _endOfStories
+                  ? _stories.isNotEmpty
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Spacer(),
+                        const Spacer(),
                         const Text(
                           'No more stories',
                           style: TextStyle(fontSize: 20, color: Colors.white),
                         ),
-                        Spacer(),
+                        const Spacer(),
                         TextButton.icon(
                           icon: const Icon(
                             Icons.downloading_outlined,
@@ -414,9 +531,16 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                             style: TextStyle(color: Colors.white),
                           ),
                         ),
-                        Spacer(),
+                        const Spacer(),
                       ],
                     )
+                  : const Text(
+                      'No Stories Found',
+                      style: TextStyle(
+                        fontSize: 24,
+                        color: Colors.white,
+                ),
+              )
                   : SizedBox(
                       height: mediaQuery.height / 1.7,
                       child: PageView.builder(
@@ -443,6 +567,22 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                       ),
                     ),
             ),
+        _stories.isNotEmpty
+            ? !_loading
+                ? Positioned(
+                  top: mediaQuery.height / 100,
+                  right: mediaQuery.width / 2.25,
+                  child: GestureDetector(
+                      onTap: toggleFavorite,
+                      child: Icon(
+                        _stories[_currentStory]?.isFavorite ?? false ? Icons.favorite : Icons.favorite_border,
+                        color: _stories[_currentStory].isFavorite ? Colors.red : Colors.white,
+                        size: mediaQuery.width /10,
+                      )
+                  ),
+            )
+                : const SizedBox.shrink()
+            : SizedBox.shrink(),// Display the loading indicator
             //Next story button
             Positioned(
               bottom: mediaQuery.height / 11,
@@ -489,7 +629,7 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                       _currentPage = 0;
                       if (_currentStory >= 0 && _currentStory < _stories.length) {
                         _pages = splitString(
-                          _stories[_currentStory],
+                          _stories[_currentStory].content,
                           mediaQuery.width,
                           mediaQuery.height / 1.9,
                         );
@@ -499,7 +639,7 @@ class _StoryGeneratorState extends State<StoryGenerator> {
                       _currentPage = 0; // Reset the current page index
                       if (_currentStory >= 0 && _currentStory < _stories.length) {
                         _pages = splitString(
-                          _stories[_currentStory],
+                          _stories[_currentStory].content,
                           mediaQuery.width,
                           mediaQuery.height / 1.9,
                         );
@@ -548,11 +688,11 @@ class Alert extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: Colors.deepOrange,
-      title: Text('Timeout', style: TextStyle(color: Colors.white,),),
-      content: Text('Fetching stories timed out.'),
+      title: const Text('Timeout', style: TextStyle(color: Colors.white,),),
+      content: const Text('Fetching stories timed out.'),
       actions: [
         TextButton(
-          child: Text('OK'),
+          child: const Text('OK'),
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -560,4 +700,12 @@ class Alert extends StatelessWidget {
       ],
     );
   }
+}
+
+class Story {
+  final String id;
+  final String content;
+  bool isFavorite;
+
+  Story({required this.id, required this.content, required this.isFavorite});
 }
